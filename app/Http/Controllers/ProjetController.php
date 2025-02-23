@@ -130,34 +130,36 @@ class ProjetController extends Controller
     /**
      * Invite un utilisateur à rejoindre le projet
      */
-    public function inviterMembre(Request $request, Projet $projet)
-{
-    // Vérifier si l'utilisateur a le droit d'inviter des membres
-    if ($projet->createur_id != Auth::id() && 
-        !$projet->membres()->where('user_id', Auth::id())->where('role', 'admin')->exists()) {
-        abort(403, 'Vous n\'avez pas le droit d\'inviter des membres');
+    public function inviterMembre(Request $request, Projet $projet){
+
+        // Vérifier si l'utilisateur a le droit d'inviter des membres
+        if ($projet->createur_id != Auth::id() && 
+            !$projet->membres()->where('user_id', Auth::id())->where('role', 'admin')->exists()) {
+            abort(403, 'Vous n\'avez pas le droit d\'inviter des membres');
+        }
+    
+
+        // Validation de l'email et du rôle
+        $validated = $request->validate([
+            'email' => 'required|email|exists:users,email',
+            'role' => 'required|in:admin,membre',
+        ]);
+
+        // Récupération de l'utilisateur
+        $user = User::where('email', $validated['email'])->first();
+
+        // Vérifier si l'utilisateur est déjà membre
+        if ($projet->membres->contains($user->id)) {
+            return redirect()->back()
+                             ->with('error', 'Cet utilisateur est déjà membre du projet');
+        }
+
+        // Ajouter l'utilisateur au projet
+        $projet->membres()->attach($user->id, ['role' => $validated['role']]);
+
+        // Envoi de l'invitation par email
+        Mail::to($user->email)->send(new InvitationProjet($projet, $user));
+
+        return redirect()->back()->with('success', 'Utilisateur invité avec succès!');
     }
-
-    // Validation de l'email et du rôle
-    $validated = $request->validate([
-        'email' => 'required|email|exists:users,email',
-        'role' => 'required|in:admin,membre',
-    ]);
-
-    // Récupération de l'utilisateur
-    $user = User::where('email', $validated['email'])->first();
-
-    // Vérifier si l'utilisateur est déjà membre
-    if ($projet->membres->contains($user->id)) {
-        return redirect()->back()
-                         ->with('error', 'Cet utilisateur est déjà membre du projet');
-    }
-
-    // Ajouter l'utilisateur au projet
-    $projet->membres()->attach($user->id, ['role' => $validated['role']]);
-
-    // Envoi de l'invitation par email
-    Mail::to($user->email)->send(new InvitationProjet($projet, $user));
-
-    return redirect()->back()->with('success', 'Utilisateur invité avec succès!');
 }
